@@ -6,7 +6,7 @@ import random
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import roc_curve, confusion_matrix
 
 matplotlib.use('TkAgg')
 
@@ -24,7 +24,8 @@ def input_output(df):
     """
     X = np.array(embedding_array(df['embedding'].values))
     y = df['labels'].values
-    directories = df['series_dir'].values
+    # directories = df['series_dir'].values
+    directories = df['file_name'].values
     return X, y, directories
 
 def create_dataset(filename):
@@ -35,7 +36,6 @@ def create_dataset(filename):
     df_labels = pd.read_csv(filename)
     df_labels = df_labels.reset_index(drop=True)
     return df_labels
-
 
 def split_dataset(df_labels, label, split_ratio = 0.2):
     """
@@ -54,6 +54,43 @@ def split_dataset(df_labels, label, split_ratio = 0.2):
                                              stratify=df_labels[[label]])
 
     return df_train, df_validate
+
+def data_augmentation(original_data,
+                      TOKEN_NUM=1,
+                      EMBEDDINGS_SIZE = 1408,
+                      noise_std=1e-4,
+                      ratio=4)->pd.DataFrame:
+    """
+    :param original_data: dataset using the training one
+    :param TOKEN_NUM: 1
+    :param EMBEDDINGS_SIZE: 1408
+    :param noise_std: std of the noise to be added to the embeddings of original dataset
+    :param ratio: The ratio of the augmented dataset size to the original one
+    :return: the augmented dataset
+    """
+    series_original = original_data['series_id'].values
+    embeddings_original = embedding_array(original_data['embedding'].values)
+    labels_original = original_data['labels'].values
+
+    embeddings_new = []
+    series_new = []
+    labels_new = []
+    for i in range(len(series_original)):
+        embedding_datapoint = np.array(embeddings_original[i])
+        series_datapoint =series_original[i]
+        label_datapoint = labels_original[i]
+        embeddings_new.append(embedding_datapoint)
+        series_new.append(series_datapoint)
+        labels_new.append(label_datapoint)
+        for j in range(ratio):
+            noise = np.random.normal(0, noise_std, (EMBEDDINGS_SIZE * TOKEN_NUM,))
+            embeddings_new.append(embedding_datapoint + noise)
+            series_new.append(f'syntethic_{j}_{series_datapoint}')
+            labels_new.append(label_datapoint)
+
+    dataset = {'labels': labels_new, 'series_id': series_new, 'embedding':embeddings_new}
+    augmented_data = pd.DataFrame(data=dataset)
+    return augmented_data
 
 
 def auc_confidence_interval(y_true, y_pred, num_bootstraps=1000, alpha=0.05):
@@ -142,6 +179,100 @@ def plot_curve(x, y, auc, x_label=None, y_label=None, label=None):
     plt.yticks(fontsize=12)
     plt.grid(visible=True)
     plt.show()
+
+
+def calculate_optimal_threshold_metrics(y_true, y_pred_prob, target_sensitivity=None):
+    """
+    Calculates the threshold.
+
+    Args:
+        y_true: True labels
+        y_pred_prob: Predicted probabilities
+        target_sensitivity (float): If set (e.g., 0.90), finds the threshold
+                                    that yields at least this sensitivity.
+                                    If None, uses Youden's J statistic.
+    """
+    # 1. Calculate ROC Curve
+    fpr, tpr, thresholds = roc_curve(y_true, y_pred_prob)
+
+    if target_sensitivity is not None:
+        # STRATEGY 1: FIXED SENSITIVITY (Medical Standard)
+        # Find the first index where TPR is >= target_sensitivity
+        # We look for the smallest threshold (highest index in standard ROC arrays)
+        # that satisfies the condition.
+
+        # Get indices where TPR >= target
+        qualifying_indices = np.where(tpr >= target_sensitivity)[0]
+
+        if len(qualifying_indices) > 0:
+            # Use the index that maximizes specificity (minimizes FPR) among those that qualify
+            # Since FPR and TPR are sorted, usually the first one that hits the target
+            # is the one with the lowest FPR.
+            best_idx = qualifying_indices[0]
+
+            # Safety check: if the resulting FPR is 1.0, the model might be failing to reach target
+            if fpr[best_idx] == 1.0 and tpr[best_idx] < target_sensitivity:
+                # Fallback to Youden if target is unreachable
+                best_idx = np.argmax(tpr - fpr)
+        else:
+            # Target unreachable, fallback to Youden
+            best_idx = np.argmax(tpr - fpr)
+
+    else:
+        # STRATEGY 2: YOUDEN'S INDEX (Balanced)
+        J = tpr - fpr
+        best_idx = np.argmax(J)
+
+    best_threshold = thresholds[best_idx]
+
+    # 3. Apply Threshold
+    y_pred_binary = (y_pred_prob >= best_threshold).astype(int)
+
+    # 4. Calculate Confusion Matrix
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred_binary).ravel()
+
+    # 5. Calculate Metrics
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+
+    return {
+        'optimal_threshold': float(best_threshold),
+        'sensitivity': float(sensitivity),
+        'specificity': float(specificity),
+        'true_positives': int(tp),
+        'true_negatives': int(tn),
+        'false_positives': int(fp),
+        'false_negatives': int(fn)
+    }
+
+
+def calculate_metrics_at_threshold(y_true, y_pred_prob, threshold):
+    """
+    Calculates confusion matrix metrics given a specific threshold.
+
+    Returns:
+        A dictionary with sensitivity, specificity, and confusion matrix counts,
+        all as native Python types (int/float) for JSON serialization.
+    """
+    # Apply the threshold to get binary predictions
+    y_pred_binary = (y_pred_prob >= threshold).astype(int)
+
+    # Calculate raw confusion matrix
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred_binary).ravel()
+
+    # Calculate metrics
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+
+    return {
+        'threshold_used': float(threshold),
+        'sensitivity': float(sensitivity),
+        'specificity': float(specificity),
+        'true_positives': int(tp),
+        'true_negatives': int(tn),
+        'false_positives': int(fp),
+        'false_negatives': int(fn)
+    }
 
 
 def generate_threshold_performance_report(y_val, y_pred_prob,thresholds):

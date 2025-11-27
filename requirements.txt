@@ -1,15 +1,7 @@
-absl-py
-dicomweb-client[gcp]
-google-auth
-requests-toolbelt
-keras-tuner~=1.4.7
 numpy
 scikit-learn
+scikeras
 pandas
-tensorflow~=2.18.0
-matplotlib~=3.5.1
-protobuf~=4.21.12
-dicom2nifti
+tensorflow
+matplotlib
 
-pydicom~=3.0.1
-nibabel~=5.3.2

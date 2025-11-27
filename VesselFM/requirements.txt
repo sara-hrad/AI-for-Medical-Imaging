@@ -1,0 +1,12 @@
+keras-tuner
+numpy
+scikit-learn
+scikeras
+pandas
+tensorflow
+matplotlib
+protobuf
+dicom2nifti
+
+pydicom
+nibabel
