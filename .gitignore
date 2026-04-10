@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model checkpoints and outputs
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.onnx
+*.safetensors
+
+# Data
+*.nii
+*.nii.gz
+*.dcm
+*.npy
+*.npz
+
+# Logs
+*.log
+wandb/
+runs/
+logs/
+
+# Training outputs
+results/

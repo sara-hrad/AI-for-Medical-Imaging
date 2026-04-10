@@ -1,7 +1,23 @@
+# Core
 numpy
-scikit-learn
-scikeras
 pandas
 tensorflow
-matplotlib
 
+# ML / Training
+scikit-learn
+keras-tuner
+joblib
+tensorboard
+
+# Visualization
+matplotlib
+seaborn
+
+# Data preprocessing
+nibabel
+scipy
+tqdm
+
+# Side projects (see projects/ for details)
+# cxr-foundation, google-cloud-storage, tensorflow-models-official
+# pydicom, dicom2nifti
